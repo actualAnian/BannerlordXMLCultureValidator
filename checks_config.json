@@ -1,0 +1,45 @@
+{
+  "_comment": "Priority table for culture validation checks. Each check id may be:",
+  "_comment2": "  \"required\"  - missing data makes the culture fail the validation (exit code 1)",
+  "_comment3": "  \"optional\"  - missing data is only a warning; the culture still 'works'",
+  "_comment4": "  \"info\"      - never fails; just informational output",
+  "_comment5": "  \"disabled\"  - check is skipped entirely",
+  "_comment6": "A check id can also be an object: {\"priority\": \"optional\", \"files\": [\"education_character_templates.xml\"]}",
+  "_comment7": "where 'files' restricts which data files that check inspects (matched by basename / glob).",
+  "_comment8": "File patterns below tell the indexer which xml files to read and which dirs to skip.",
+
+  "culture_file_patterns": ["*.xml"],
+  "data_file_patterns": ["*.xml"],
+  "exclude_dirs": [
+    "Languages", "GUI", "Scenes", "SceneData", "DistanceCaches", "Materials",
+    "Movies", "NavigationData", "Atmospheres", "Particles", "Prefabs", "fonts"
+  ],
+  "exclude_files": ["project.mbproj"],
+
+  "checks": {
+    "common_attrs": "required",
+    "main_culture_attrs": "required",
+    "settlement_attrs": "required",
+    "bandit_attrs": "required",
+    "npc_character_refs": "required",
+    "party_template_refs": "required",
+    "equipment_roster_refs": "required",
+    "body_property_refs": "required",
+    "item_refs": "required",
+    "name_lists": "required",
+    "equipment_templates_categories": {
+      "priority": "required",
+      "_comment": "Checks per-culture equipment rosters (EquipmentCategories flags) required by DefaultEquipmentSelectionModel. Applies to main cultures only. Scans all data folders."
+    },
+    "equipment_roster_flags": "required",
+    "culture_value_validity": "required",
+    "education_character_templates": {
+      "priority": "optional",
+      "files": ["education_character_templates.xml"]
+    },
+    "npc_culture_tags": "optional",
+    "body_property_culture_tags": "optional",
+    "policy_refs": "info",
+    "feats_banner_icons_ship_hulls": "info"
+  }
+}
