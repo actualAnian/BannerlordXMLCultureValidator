@@ -75,6 +75,12 @@ class ObjectIndex:
         # Problems on an EquipmentRoster's <Flags>: unknown flag name or a value
         # that is not a valid boolean ("true"/"false").
         self.invalid_flags = {}
+        # NPCCharacter id -> occupation attribute value (only when present).
+        self.npc_occupations = {}
+        # NPCCharacter ids that exist but lack an occupation attribute.
+        self.npc_no_occupation = set()
+        # NPCCharacter id -> is_template attribute value (only when present).
+        self.npc_is_template = {}
 
     # ---- generic helpers ---------------------------------------------------
 
@@ -197,6 +203,16 @@ class ObjectIndex:
                     if name:
                         self._add_body_property_tag(name.strip(), obj_id)
 
+        if element_tag == "NPCCharacter":
+            occupation = element.get("occupation")
+            if occupation:
+                self.npc_occupations[obj_id] = occupation
+            else:
+                self.npc_no_occupation.add(obj_id)
+            is_template = element.get("is_template")
+            if is_template:
+                self.npc_is_template[obj_id] = is_template.strip().lower() == "true"
+
         if element_tag == EQUIP_ROSTER_ELEMENT and culture:
             self._add_category_roster(culture_id, obj_id, element, source_file)
 
@@ -262,6 +278,15 @@ class ObjectIndex:
                 culture_id = _strip_culture_prefix(culture)
                 if culture_id and culture_id != obj_id:
                     self._add_tagged(ref_type, culture_id, obj_id, source_file)
+            if tag == "NPCCharacter":
+                occupation = attrs.get("occupation")
+                if occupation:
+                    self.npc_occupations[obj_id] = occupation
+                else:
+                    self.npc_no_occupation.add(obj_id)
+                is_template = attrs.get("is_template")
+                if is_template:
+                    self.npc_is_template[obj_id] = is_template.strip().lower() == "true"
 
 
 def index_folders(folders, config):

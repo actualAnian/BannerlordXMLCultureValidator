@@ -105,6 +105,59 @@ CARAVAN_PARENTS = ("caravan_party_templates", "elite_caravan_party_templates")
 ITEM_PARENTS = ("vassal_reward_items", "banner_bearer_replacement_weapons")
 
 # --------------------------------------------------------------------------
+# Expected occupation values for NPCCharacter roles referenced by cultures.
+# Maps culture attribute name -> expected occupation string in spnpccharacters.xml.
+# --------------------------------------------------------------------------
+
+OCCUPATION_MAP = {
+    "townsman": "Townsfolk",
+    "townsman_infant": "Townsfolk",
+    "townsman_child": "Townsfolk",
+    "townsman_teenager": "Townsfolk",
+    "townswoman": "Townsfolk",
+    "townswoman_infant": "Townsfolk",
+    "townswoman_child": "Townsfolk",
+    "townswoman_teenager": "Townsfolk",
+    "villager": "Villager",
+    "villager_male_child": "Villager",
+    "villager_male_teenager": "Villager",
+    "villager_female_child": "Villager",
+    "villager_female_teenager": "Villager",
+    "village_woman": "Villager",
+    "blacksmith": "Blacksmith",
+    "weaponsmith": "Weaponsmith",
+    "tavernkeeper": "Tavernkeeper",
+    "taverngamehost": "TavernGameHost",
+    "musician": "Musician",
+    "tavern_wench": "TavernWench",
+    "armorer": "Armorer",
+    "horseMerchant": "HorseTrader",
+    "barber": "Townsfolk",
+    "merchant": "GoodsTrader",
+    "beggar": "Townsfolk",
+    "female_beggar": "Townsfolk",
+    "female_dancer": "Townsfolk",
+    "shop_worker": "ShopWorker",
+    "ransom_broker": "RansomBroker",
+    "gangleader_bodyguard": "Townsfolk",
+    "merchant_notary": "Townsfolk",
+    "artisan_notary": "Townsfolk",
+    "preacher_notary": "Townsfolk",
+    "rural_notable_notary": "Townsfolk",
+    "caravan_master": "CaravanGuard",
+    "caravan_guard": "CaravanGuard",
+    "veteran_caravan_guard": "CaravanGuard",
+    "prison_guard": "PrisonGuard",
+    "tournament_master": "ArenaMaster",
+}
+
+# Expected occupation types among notable_templates characters.
+# Each main culture must have at least one notable template per type.
+NOTABLE_OCCUPATION_TYPES = frozenset({
+    "Merchant", "Artisan", "Preacher", "GangLeader", "RuralNotable", "Headman"
+})
+
+# --------------------------------------------------------------------------
 # Required attributes / child elements by culture bucket
 # --------------------------------------------------------------------------
 
@@ -515,6 +568,95 @@ def _run_feats_icons(index, elem, culture_id, config_entry):
     }
 
 
+def _run_npc_occupations(index, elem, culture_id, config_entry):
+    total = 0
+    found = 0
+    missing = []
+    for attr, expected_occ in OCCUPATION_MAP.items():
+        ref_value = elem.get(attr)
+        if not ref_value:
+            continue
+        _prefix, obj_id = split_ref(ref_value)
+        total += 1
+        actual_occ = index.npc_occupations.get(obj_id)
+        if actual_occ is None:
+            if not index.has("NPCCharacter", obj_id):
+                missing.append("%s (character not found)" % ref_value)
+            else:
+                missing.append("%s (no occupation attribute; expected %s)"
+                               % (ref_value, expected_occ))
+        elif actual_occ != expected_occ:
+            missing.append("%s (occupation=%s, expected %s)"
+                           % (ref_value, actual_occ, expected_occ))
+        else:
+            found += 1
+    note = "%d of %d role characters have correct occupation" % (found, total)
+    return {"found": found, "total": total, "missing": missing, "note": note}
+
+
+def _run_notable_template_occupations(index, elem, culture_id, config_entry):
+    """Verify notable_templates cover all expected occupation types."""
+    notable_node = elem.find("notable_templates")
+    if notable_node is None:
+        return {
+            "found": 0, "total": len(NOTABLE_OCCUPATION_TYPES),
+            "missing": ["<notable_templates/> element missing"],
+            "note": "no notable_templates element",
+        }
+    found_occupations = set()
+    missing = []
+    total_templates = 0
+    for child in notable_node.findall("template"):
+        ref_value = child.get("name")
+        if not ref_value:
+            continue
+        total_templates += 1
+        _prefix, obj_id = split_ref(ref_value)
+        occ = index.npc_occupations.get(obj_id)
+        if occ:
+            found_occupations.add(occ)
+    missing_types = sorted(NOTABLE_OCCUPATION_TYPES - found_occupations)
+    for occ_type in missing_types:
+        missing.append("no notable template with occupation=%s" % occ_type)
+    found = len(NOTABLE_OCCUPATION_TYPES) - len(missing_types)
+    note = ("%d of %d expected occupation types covered by %d notable templates"
+            % (found, len(NOTABLE_OCCUPATION_TYPES), total_templates))
+    return {"found": found, "total": len(NOTABLE_OCCUPATION_TYPES),
+            "missing": missing, "note": note}
+
+
+def _run_notable_template_is_template(index, elem, culture_id, config_entry):
+    """Verify every notable template character has is_template="true"."""
+    notable_node = elem.find("notable_templates")
+    if notable_node is None:
+        return {
+            "found": 0, "total": 0,
+            "missing": [],
+            "note": "no notable_templates element",
+        }
+    total = 0
+    found = 0
+    missing = []
+    for child in notable_node.findall("template"):
+        ref_value = child.get("name")
+        if not ref_value:
+            continue
+        total += 1
+        _prefix, obj_id = split_ref(ref_value)
+        is_tmpl = index.npc_is_template.get(obj_id)
+        if is_tmpl is True:
+            found += 1
+        elif is_tmpl is False:
+            missing.append("%s (is_template=false)" % ref_value)
+        else:
+            if not index.has("NPCCharacter", obj_id):
+                missing.append("%s (character not found)" % ref_value)
+            else:
+                missing.append("%s (is_template attribute missing)" % ref_value)
+    note = "%d of %d notable templates have is_template=true" % (found, total)
+    return {"found": found, "total": total, "missing": missing, "note": note}
+
+
 class CheckSpec:
     def __init__(self, check_id, label, description, default_priority,
                  applies, run):
@@ -647,6 +789,23 @@ CHECKS = {
         "Informational counts of cultural_feats, possible_clan_banner_icon_ids "
         "and available_ship_hulls. These catalogs are engine-side.",
         "info", _applies_main, _run_feats_icons),
+    "npc_occupations": CheckSpec(
+        "npc_occupations", "NPC character occupation values",
+        "Each NPCCharacter role referenced by the culture must have the correct "
+        "occupation attribute in spnpccharacters.xml (e.g. townsman requires "
+        "occupation=\"Townsfolk\").",
+        "required", _applies_always, _run_npc_occupations),
+    "notable_template_occupations": CheckSpec(
+        "notable_template_occupations", "Notable template occupation coverage",
+        "Each main culture's notable_templates must include at least one "
+        "template for each expected occupation type (Merchant, Artisan, "
+        "Preacher, GangLeader, RuralNotable).",
+        "required", _applies_main, _run_notable_template_occupations),
+    "notable_template_is_template": CheckSpec(
+        "notable_template_is_template", "Notable templates have is_template flag",
+        "Every NPCCharacter referenced by a culture's notable_templates must "
+        "carry is_template=\"true\" so the engine can identify them as templates.",
+        "warning", _applies_main, _run_notable_template_is_template),
 }
 
 DEFAULT_PRIORITIES = {check_id: spec.default_priority for check_id, spec in CHECKS.items()}

@@ -10,6 +10,7 @@ _COLORS = {
     "green": "\033[92m",
     "red": "\033[91m",
     "yellow": "\033[93m",
+    "bright_yellow": "\033[1;93m",
     "cyan": "\033[96m",
     "dim": "\033[2m",
 }
@@ -33,6 +34,9 @@ class Console:
     def warn(self, text):
         return self.paint(text, "yellow")
 
+    def warn_bright(self, text):
+        return self.paint(text, "bright_yellow")
+
     def head(self, text):
         return self.paint(text, "bold")
 
@@ -45,6 +49,7 @@ class Console:
 
 PRIMARY_STATUS = {
     "required": "MISS ",
+    "warning": "WARN ",
     "optional": "OPT* ",
     "info": "INFO ",
 }
@@ -57,23 +62,38 @@ def _row_status_text(check, console):
     if check["status"] == "disabled":
         return ("[" + SKIP_STATUS + "] " + console.dim("skip   ")), "dim"
     if check["status"] != "ok":
+        if priority == "required":
+            return ("[" + PRIMARY_STATUS[priority] + "] "
+                    + console.fail("%-7s" % priority)), "fail"
+        if priority == "warning":
+            if check["status"] != "ok":
+                return ("[" + PRIMARY_STATUS[priority] + "] "
+                        + console.warn_bright("%-7s" % priority)), "warn_bright"
+            return ("[" + OK_STATUS + "] " + console.ok("%-7s" % priority)), "ok"
+        if priority == "optional":
+            return ("[" + PRIMARY_STATUS[priority] + "] "   
+                    + console.warn("%-7s" % priority)), "warn"
         return ("[" + PRIMARY_STATUS.get(priority, "MISS ") + "] "
-                + console.fail("%-7s" % priority)), "fail" if priority == "required" else "warn"
+                + console.fail("%-7s" % priority)), "warn"
+    if priority == "warning":
+        return ("[" + OK_STATUS + "] " + console.warn_bright("%-7s" % priority)), "warn_bright"
     return ("[" + OK_STATUS + "] " + console.ok("%-7s" % priority)), "ok"
 
 
 def _summary_counts(check):
-    """For summary purposes: required problems / optional warnings / info rows."""
+    """For summary purposes: required problems / warnings / optional warnings / info rows."""
     if check["status"] in ("not_applicable", "disabled"):
-        return 0, 0, 0
+        return 0, 0, 0, 0
     priority = check["priority"]
     if priority == "info":
-        return 0, 0, 1
+        return 0, 0, 0, 1
     if check["status"] == "missing":
         if priority == "optional":
-            return 0, 1, 0
-        return 1, 0, 0  # required (or unknown priority)
-    return 0, 0, 0
+            return 0, 0, 1, 0
+        if priority == "warning":
+            return 0, 1, 0, 0
+        return 1, 0, 0, 0  # required (or unknown priority)
+    return 0, 0, 0, 0
 
 
 def verdict_for(culture_entry):
@@ -102,11 +122,13 @@ def build_text(context, console):
     lines.append(w.dim("Legend:"))
     lines.append(w.dim("  [%s] required check passed" % OK_STATUS.strip()))
     lines.append(w.dim("  [MISS] required check failed - culture missing data needed to work"))
+    lines.append(w.dim("  [WARN] warning - not required but recommended (see note)"))
     lines.append(w.dim("  [%s] optional check found nothing - culture still works (see note)" % "OPT*"))
     lines.append(w.dim("  [INFO] informational only, never fails"))
     lines.append("")
 
     failures = 0
+    warnings = 0
     optional_warnings = 0
     info_rows = 0
     status_map = {}
@@ -146,18 +168,28 @@ def build_text(context, console):
 
             if check["status"] == "missing":
                 for item in check["missing"]:
-                    lines.append("        missing: " + w.fail(item))
+                    if check["priority"] == "optional":
+                        lines.append("        missing: " + w.warn(item))
+                    elif check["priority"] == "warning":
+                        lines.append("        missing: " + w.warn_bright(item))
+                    else:
+                        lines.append("        missing: " + w.fail(item))
                 if check["priority"] == "required":
                     culture_fail = True
+                elif check["priority"] == "warning":
+                    lines.append("        " + w.warn_bright("WARNING - %s (not required but recommended)."
+                                                           % check.get("description", "")))
                 elif check["priority"] == "optional":
                     lines.append("        " + w.warn("OPTIONAL - %s (culture still works)."
-                                                      % check.get("description", "")))
+                                                     % check.get("description", "")))
 
         # roll up counts
         for check in culture["checks"]:
-            rp, ow, inf = _summary_counts(check)
+            rp, wc, ow, inf = _summary_counts(check)
             if rp:
                 failures += 1
+            if wc:
+                warnings += 1
             if ow:
                 optional_warnings += 1
             if inf:
@@ -175,6 +207,7 @@ def build_text(context, console):
     passes = sum(1 for v in status_map.values() if v == "PASS")
     lines.append("  PASS / FAIL      : %d / %d" % (passes, len(cultures) - passes))
     lines.append("  required problems: %d" % failures)
+    lines.append("  warnings         : %d" % warnings)
     lines.append("  optional warnings : %d" % optional_warnings)
     lines.append("  info rows         : %d" % info_rows)
     if context.get("parse_fallback_files"):
@@ -244,6 +277,10 @@ def assemble_json(context, check_configs, index):
             "required_problems": sum(
                 sum(1 for ch in c["checks"]
                     if ch["status"] == "missing" and ch["priority"] == "required")
+                for c in cultures_json),
+            "warnings": sum(
+                sum(1 for ch in c["checks"]
+                    if ch["status"] == "missing" and ch["priority"] == "warning")
                 for c in cultures_json),
             "optional_warnings": sum(
                 sum(1 for ch in c["checks"]
