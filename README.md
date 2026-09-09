@@ -3,7 +3,7 @@
 Validates that `<Culture>` definitions in a Mount & Blade II: Bannerlord mod carry
 all the data they need to work, by resolving every reference they make
 (`NPCCharacter.*`, `PartyTemplate.*`, `EquipmentRoster.*`, `BodyProperty.*`,
-`Item.*`, ...) against one or more `ModuleData` folders.
+`Item.*`, string IDs, ...) against one or more `ModuleData` folders.
 
 Read-only: it only parses XML and prints a report. It never edits your mod files.
 
@@ -18,11 +18,15 @@ Read-only: it only parses XML and prints a report. It never edits your mod files
 | `checks_config.json` | Priority table — flip checks between `required` / `optional` / `info` / `disabled` |
 
 ## Usage
-
+### if using .exe from releases -
 ```
-python culture_validator.py --data <folder> [<folder> ...] --cultures <file|folder> [options]
+CultureValidator.exe --data [<folder> ...] --cultures <file with cultures defined |folder containing the culture .xml> [options]
 ```
-
+### if downloaded from repo
+```
+python culture_validator.py --data [<folder> ...] --cultures <file with cultures defined |folder containing the culture .xml> [options]
+```
+## Options
 - `--data FOLDER` — one or more `ModuleData` folders whose objects the cultures
   may reference (repeat the flag or use multiple paths).
 - `--cultures PATH` — the XML file containing the `<Culture>` entries to validate
@@ -39,6 +43,7 @@ Validate your cultures against the base-game data folders:
 python culture_validator.py `
   --data "C:\Program Files (x86)\Steam\steamapps\common\Mount & Blade II Bannerlord\Modules\SandBoxCore\ModuleData" `
          "C:\Program Files (x86)\Steam\steamapps\common\Mount & Blade II Bannerlord\Modules\SandBox\ModuleData" `
+         "C:\Program Files (x86)\Steam\steamapps\common\Mount & Blade II Bannerlord\Modules\Native\ModuleData" `
          "C:\MyMod\ModuleData" `
   --cultures "C:\MyMod\ModuleData\spcultures.xml"
 ```
@@ -63,6 +68,33 @@ only the applicable checks run:
   `Convert.ToBoolean` / `Convert.ToUInt32(value, 16)` and crashes on bad values),
   and every `EquipmentRoster` `<Flags>` name must be a real `EquipmentCategories`
   member with a boolean value (`Enum.Parse` / `bool.Parse` crash at load on those).
+- **required (NPC occupations)** — each NPCCharacter role referenced by the culture
+  must have the correct `occupation` attribute in `spnpccharacters.xml` (e.g.
+  `townsman` requires `occupation="Townsfolk"`). Wrong values cause incorrect
+  hero behavior in-game.
+- **required (notable template coverage)** — each main culture's `notable_templates`
+  must include at least one template for each expected occupation type (Merchant,
+  Artisan, Preacher, GangLeader, RuralNotable, Headman). Missing types mean the
+  game cannot spawn that notable type in settlements.
+- **required (character creation)** — `CharacterCreationCampaignBehavior.cs`
+  constructs equipment roster IDs at runtime. Universal templates
+  (`retainer`/`farmer` for parents, `guard`/`infantry` for the player) and the
+  `player_char_creation_default` fallback must exist in the data folders.
+- **required (culture strings)** — `GameTexts.FindText()` looks up
+  `str_culture_description`, `str_culture_rich_name`, `str_faction_official`,
+  `str_faction_ruler`, `str_faction_ruler_name_with_title`,
+  `str_faction_noble_name_with_title`, `str_faction_formal_name_for_culture`,
+  `str_faction_informal_name_for_culture`, `str_adjective_for_culture`, and
+  `str_neutral_term_for_culture` (male + female variants where applicable) for
+  each culture. Missing strings cause crashes or `ERROR_MISSING_NAME` in the UI.
+- **warning (notable template flag)** — every NPCCharacter referenced by a culture's
+  `notable_templates` must carry `is_template="true"` so the engine can identify
+  them as templates rather than spawned heroes.
+- **warning (character creation optional)** — non-universal character creation
+  equipment rosters (e.g. `physician`, `herder`, `bard`, `kern`, `vagabond`,
+  `healer`, `mercenary`, `skirmisher`) are only needed if the culture uses the
+  corresponding parent/youth options in `CharacterCreationCampaignBehavior.cs`.
+  Missing rosters produce a warning with guidance to check the game code.
 - **optional** — education character templates, NPC characters and
   body properties tagged with the culture (missing = warning only).
 - **info** — default policies, feats / clan banner icons / ship hulls
