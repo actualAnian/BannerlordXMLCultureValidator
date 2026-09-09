@@ -461,6 +461,185 @@ def _run_equipment_template_categories(index, elem, culture_id, config_entry):
     return {"found": found, "total": total, "missing": missing, "note": note}
 
 
+# --------------------------------------------------------------------------
+# Character creation equipment roster requirements
+# --------------------------------------------------------------------------
+# CharacterCreationCampaignBehavior.cs constructs equipment roster IDs at
+# runtime using these patterns:
+#   Parent:    {mother|father}_char_creation_{template}_{culture}
+#   Childhood: player_char_creation_childhood_age_{culture}_{template}_{gender}
+#   Education: player_char_creation_education_age_{culture}_{template}_{gender}
+#   Player:    player_char_creation_{culture}_{template}_{gender}
+#   Default:   player_char_creation_default
+#
+# Not every culture uses every template.  The universal ones (used by ALL
+# vanilla cultures) are required; the rest are optional with warnings.
+
+# Parent templates used by ALL 6 vanilla cultures.
+_CHAR_CREATION_UNIVERSAL_PARENT = ("retainer", "farmer")
+
+# Player (youth/adult) templates used by ALL 6 vanilla cultures.
+_CHAR_CREATION_UNIVERSAL_PLAYER = ("guard", "infantry")
+
+# All parent templates across all vanilla cultures.
+_CHAR_CREATION_PARENT_TEMPLATES = (
+    "retainer", "merchant", "farmer", "artisan", "hunter", "vagabond",
+    "healer", "herder", "mercenary", "physician", "bard",
+)
+
+# All player (youth/adult) templates across all vanilla cultures.
+_CHAR_CREATION_PLAYER_TEMPLATES = (
+    "retainer", "mercenary", "guard", "hunter", "infantry",
+    "skirmisher", "kern", "bard",
+)
+
+
+def _build_char_creation_required_ids(culture_id):
+    """Build the set of *required* char_creation roster IDs.
+
+    These are the universal templates that every culture must provide for
+    character creation to work (retainer/farmer for parents, guard/infantry
+    for the player, plus the default fallback).
+    """
+    ids = []
+    # Parent stage (mother + father)
+    for t in _CHAR_CREATION_UNIVERSAL_PARENT:
+        ids.append("mother_char_creation_%s_%s" % (t, culture_id))
+        ids.append("father_char_creation_%s_%s" % (t, culture_id))
+    # Childhood age (both genders)
+    for t in _CHAR_CREATION_UNIVERSAL_PARENT:
+        ids.append("player_char_creation_childhood_age_%s_%s_m" % (culture_id, t))
+        ids.append("player_char_creation_childhood_age_%s_%s_f" % (culture_id, t))
+    # Education age (both genders)
+    for t in _CHAR_CREATION_UNIVERSAL_PARENT:
+        ids.append("player_char_creation_education_age_%s_%s_m" % (culture_id, t))
+        ids.append("player_char_creation_education_age_%s_%s_f" % (culture_id, t))
+    # Player adult (both genders)
+    for t in _CHAR_CREATION_UNIVERSAL_PLAYER:
+        ids.append("player_char_creation_%s_%s_m" % (culture_id, t))
+        ids.append("player_char_creation_%s_%s_f" % (culture_id, t))
+    # Default fallback (culture-independent)
+    ids.append("player_char_creation_default")
+    return ids
+
+
+def _build_char_creation_optional_ids(culture_id):
+    """Build the set of *optional* char_creation roster IDs.
+
+    These are templates used by some but not all vanilla cultures.  If a
+    culture uses one of these parent/youth options in its
+    CharacterCreationCampaignBehavior the corresponding rosters must exist.
+    """
+    ids = []
+    # Parent stage - non-universal templates
+    for t in _CHAR_CREATION_PARENT_TEMPLATES:
+        if t not in _CHAR_CREATION_UNIVERSAL_PARENT:
+            ids.append("mother_char_creation_%s_%s" % (t, culture_id))
+            ids.append("father_char_creation_%s_%s" % (t, culture_id))
+    # Childhood age - non-universal templates
+    for t in _CHAR_CREATION_PARENT_TEMPLATES:
+        if t not in _CHAR_CREATION_UNIVERSAL_PARENT:
+            ids.append("player_char_creation_childhood_age_%s_%s_m" % (culture_id, t))
+            ids.append("player_char_creation_childhood_age_%s_%s_f" % (culture_id, t))
+    # Education age - non-universal templates
+    for t in _CHAR_CREATION_PARENT_TEMPLATES:
+        if t not in _CHAR_CREATION_UNIVERSAL_PARENT:
+            ids.append("player_char_creation_education_age_%s_%s_m" % (culture_id, t))
+            ids.append("player_char_creation_education_age_%s_%s_f" % (culture_id, t))
+    # Player adult - non-universal templates
+    for t in _CHAR_CREATION_PLAYER_TEMPLATES:
+        if t not in _CHAR_CREATION_UNIVERSAL_PLAYER:
+            ids.append("player_char_creation_%s_%s_m" % (culture_id, t))
+            ids.append("player_char_creation_%s_%s_f" % (culture_id, t))
+    return ids
+
+
+def _run_char_creation_equipment(index, elem, culture_id, config_entry):
+    """Check that universal character creation equipment rosters exist.
+
+    These rosters are constructed at runtime by CharacterCreationCampaignBehavior
+    and are required for every main culture that participates in character creation.
+    """
+    required_ids = _build_char_creation_required_ids(culture_id)
+    found = 0
+    missing = []
+    for roster_id in required_ids:
+        if index.has("EquipmentRoster", roster_id):
+            found += 1
+        else:
+            missing.append(roster_id)
+    note = ("%d of %d required character creation rosters present"
+            % (found, len(required_ids)))
+    return {"found": found, "total": len(required_ids),
+            "missing": missing, "note": note}
+
+
+def _run_char_creation_equipment_optional(index, elem, culture_id, config_entry):
+    """Warn about optional character creation equipment rosters.
+
+    These rosters are only needed if the culture uses the corresponding
+    parent/youth options in CharacterCreationCampaignBehavior.cs.
+    """
+    optional_ids = _build_char_creation_optional_ids(culture_id)
+    found = 0
+    missing = []
+    for roster_id in optional_ids:
+        if index.has("EquipmentRoster", roster_id):
+            found += 1
+        else:
+            missing.append(roster_id)
+    note = ("%d of %d optional character creation rosters present. "
+            "Missing rosters are only needed if your culture uses them "
+            "in CharacterCreationCampaignBehavior."
+            % (found, len(optional_ids)))
+    return {"found": found, "total": len(optional_ids),
+            "missing": missing, "note": note}
+
+
+# --------------------------------------------------------------------------
+# Culture string requirements
+# --------------------------------------------------------------------------
+# GameTexts.FindText("str_...", culture.StringId) resolves to string IDs of
+# the form "str_{base}.{culture}".  Every main culture must provide these
+# strings or the game crashes / shows ERROR_MISSING_NAME at runtime.
+
+_CULTURE_STRING_PATTERNS = (
+    "str_culture_description.{culture}",
+    "str_culture_rich_name.{culture}",
+    "str_faction_official.{culture}",
+    "str_faction_official.{culture}_f",
+    "str_faction_ruler.{culture}",
+    "str_faction_ruler.{culture}_f",
+    "str_faction_ruler_name_with_title.{culture}",
+    "str_faction_noble_name_with_title.{culture}",
+    "str_faction_formal_name_for_culture.{culture}",
+    "str_faction_informal_name_for_culture.{culture}",
+    "str_adjective_for_culture.{culture}",
+    "str_neutral_term_for_culture.{culture}",
+)
+
+
+def _run_culture_strings(index, elem, culture_id, config_entry):
+    """Check that all required culture strings exist in the data files.
+
+    The game resolves these via GameTexts.FindText() with the culture's
+    StringId as the variable argument.  A missing string causes a crash
+    or displays ERROR_MISSING_NAME in the UI.
+    """
+    total = 0
+    found = 0
+    missing = []
+    for pattern in _CULTURE_STRING_PATTERNS:
+        string_id = pattern.format(culture=culture_id)
+        total += 1
+        if index.has_string(string_id):
+            found += 1
+        else:
+            missing.append(string_id)
+    note = "%d of %d required culture strings present" % (found, total)
+    return {"found": found, "total": total, "missing": missing, "note": note}
+
+
 # Attributes parsed by BasicCultureObject with Convert.ToUInt32(value, 16) -
 # a non-hex value throws FormatException during campaign boot.
 _HEX_COLOR_ATTRS = (
@@ -806,6 +985,29 @@ CHECKS = {
         "Every NPCCharacter referenced by a culture's notable_templates must "
         "carry is_template=\"true\" so the engine can identify them as templates.",
         "warning", _applies_main, _run_notable_template_is_template),
+    "char_creation_equipment": CheckSpec(
+        "char_creation_equipment", "Character creation equipment rosters (required)",
+        "CharacterCreationCampaignBehavior.cs constructs equipment roster IDs at "
+        "runtime. Universal templates (retainer/farmer for parents, guard/infantry "
+        "for the player) and the default fallback must exist in the data folders.",
+        "required", _applies_main, _run_char_creation_equipment),
+    "char_creation_equipment_optional": CheckSpec(
+        "char_creation_equipment_optional",
+        "Character creation equipment rosters (optional)",
+        "Non-universal character creation equipment rosters that are only needed "
+        "if the culture uses the corresponding parent/youth options in "
+        "CharacterCreationCampaignBehavior.cs (e.g. physician, herder, bard, kern, "
+        "vagabond, healer, mercenary, skirmisher).",
+        "warning", _applies_main, _run_char_creation_equipment_optional),
+    "culture_strings": CheckSpec(
+        "culture_strings", "Culture strings (module_strings.xml)",
+        "Every main culture needs str_culture_description, str_culture_rich_name, "
+        "str_faction_official, str_faction_ruler, str_faction_ruler_name_with_title, "
+        "str_faction_noble_name_with_title, str_faction_formal_name_for_culture, "
+        "str_faction_informal_name_for_culture, str_adjective_for_culture, and "
+        "str_neutral_term_for_culture (male + female variants where applicable). "
+        "GameTexts.FindText() crashes or shows ERROR_MISSING_NAME on missing strings.",
+        "required", _applies_main, _run_culture_strings),
 }
 
 DEFAULT_PRIORITIES = {check_id: spec.default_priority for check_id, spec in CHECKS.items()}

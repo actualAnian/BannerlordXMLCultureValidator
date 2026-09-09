@@ -81,6 +81,8 @@ class ObjectIndex:
         self.npc_no_occupation = set()
         # NPCCharacter id -> is_template attribute value (only when present).
         self.npc_is_template = {}
+        # string id -> sorted(set of source file paths)
+        self.strings = {}
 
     # ---- generic helpers ---------------------------------------------------
 
@@ -107,6 +109,12 @@ class ObjectIndex:
 
     def count(self, ref_type):
         return len(self.objects.get(ref_type, {}))
+
+    def has_string(self, string_id):
+        return string_id in self.strings
+
+    def string_sources(self, string_id):
+        return sorted(self.strings.get(string_id, set()))
 
     def tagged_ids(self, ref_type, culture_id):
         return self.tagged.get(ref_type, {}).get(culture_id, {})
@@ -216,6 +224,9 @@ class ObjectIndex:
         if element_tag == EQUIP_ROSTER_ELEMENT and culture:
             self._add_category_roster(culture_id, obj_id, element, source_file)
 
+        if element_tag == "string":
+            self.strings.setdefault(obj_id, set()).add(source_file)
+
     def _add_category_roster(self, culture_id, obj_id, element, source_file):
         flags, problems = self._read_flags(element)
         for flag_name, raw_value in problems:
@@ -287,6 +298,8 @@ class ObjectIndex:
                 is_template = attrs.get("is_template")
                 if is_template:
                     self.npc_is_template[obj_id] = is_template.strip().lower() == "true"
+            if tag == "string":
+                self.strings.setdefault(obj_id, set()).add(source_file)
 
 
 def index_folders(folders, config):

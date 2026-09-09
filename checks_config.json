@@ -40,6 +40,9 @@
     "npc_culture_tags": "optional",
     "body_property_culture_tags": "optional",
     "policy_refs": "info",
-    "feats_banner_icons_ship_hulls": "info"
+    "feats_banner_icons_ship_hulls": "info",
+    "char_creation_equipment": "required",
+    "char_creation_equipment_optional": "warning",
+    "culture_strings": "required"
   }
 }

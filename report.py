@@ -76,7 +76,7 @@ def _row_status_text(check, console):
         return ("[" + PRIMARY_STATUS.get(priority, "MISS ") + "] "
                 + console.fail("%-7s" % priority)), "warn"
     if priority == "warning":
-        return ("[" + OK_STATUS + "] " + console.warn_bright("%-7s" % priority)), "warn_bright"
+        return ("[" + OK_STATUS + "] " + console.ok("%-7s" % priority)), "ok"
     return ("[" + OK_STATUS + "] " + console.ok("%-7s" % priority)), "ok"
 
 
